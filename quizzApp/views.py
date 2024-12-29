@@ -243,7 +243,7 @@ class QuizAndSuggestionView(APIView):
         for question_data in quiz_questions: 
             Question.objects.create(
             quiz=quiz,
-            text=question_data,  
+            text=question_data['text'],  
             tag="",  
             options=question_data['options'],
             correct_option=question_data['correct_option'],
@@ -255,6 +255,7 @@ class QuizAndSuggestionView(APIView):
         # mcqs = extract_mcqs(quiz_questions)
         # suggest_q = extract_suggested_qs(suggestions)
         # Extract meaningful lines
+        print(question_data)
         mcqs = extract_line([f'{q['text']} , {q['options']} , {q['correct_option']}' for q in quiz_questions], ignore_keyword=["##", "Instructions"])
         suggested_questions = extract_line(suggestions, ignore_keyword=["##", "Here are 6 one-line"])
 
@@ -299,7 +300,7 @@ class QuizAndSuggestionView(APIView):
 
 
 
-from .serializers import QuizSerializer
+from .serializers import QuizSerializer ,QuestionSerializer
 
 class ListMCQsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -321,6 +322,18 @@ class ListMCQsView(APIView):
 
 # get mcq view only 1 mcq view
 
+class QuestionView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self,request,pk):
+        try:
+            question = Quiz.objects.get(pk=pk,created_by=request.user)
+        except Quiz.DoesNotExist:
+            return Response({"error": "MCQ not found or you do not have permission to edit it."}, status=404)
+
+        serializer = QuizSerializer(question)
+        return Response(serializer.data)
 
 class EditMCQView(APIView):
     permission_classes = [IsAuthenticated]
@@ -343,6 +356,19 @@ class EditMCQView(APIView):
 
         return Response({"message": "MCQ updated successfully"})
     
+
+class DeleteQuizView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    
+    def delete(self ,request,pk):
+        try:
+            quiz = Quiz.objects.get(pk=pk,created_by=request.user)
+        except Quiz.DoesNotExist:
+            return Response({"error": "MCQ not found or you do not have permission to delete it"},status=404)
+        
+        quiz.delete()
+        return Response({"message": "MCQ deleted successfully"})
 
 
 

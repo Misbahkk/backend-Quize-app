@@ -46,6 +46,7 @@ class Quiz(models.Model):
     description = models.TextField(blank=True, null=True)
     course_name = models.CharField(max_length=255)
     subject = models.CharField(max_length=255)
+    code = models.CharField(max_length=10,unique=True,null=True,blank=True)
     total_questions = models.IntegerField()
     passing_percentage = models.IntegerField()
     scheduled_date_time = models.DateTimeField()
@@ -78,3 +79,24 @@ class Suggestion(models.Model):
 
     def __str__(self):
         return self.topic
+
+
+
+
+class Participant(models.Model):
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=False)
+    quiz_participent = models.ForeignKey(Quiz,on_delete=models.CASCADE,related_name="participants")
+
+    def __str__(self):
+        return self.name
+    
+
+
+class ResponseParticipent(models.Model):
+    participant = models.ForeignKey('Participant', on_delete=models.CASCADE)
+    question_response = models.ForeignKey('Question',on_delete=models.CASCADE, related_name="responses")
+    select_option = models.CharField(max_length=200)
+
+    def __str__(self):
+        return f"{self.participant.name} - {self.question_response.text}"

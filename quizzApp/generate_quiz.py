@@ -5,7 +5,8 @@ import google.generativeai as genai
 # from dotenv import load_dotenv
 import threading
 from django.conf import settings
-from .models import Suggestion
+from .models import Suggestion ,Quiz
+import uuid
 
 # Load environment variables
 
@@ -36,7 +37,7 @@ def load_user_inputs(user):
     """  Load user input with a jason file """
 
     # return Suggestion.objects.filter(created_by=user).values_list('topic', flat=True)
-    return list(Suggestion.objects.filter(created_by=user).values_list('topic', flat=True))
+    return list(Quiz.objects.filter(created_by=user).values_list('title', flat=True))
 
 # def save_user_inputs(user_inputs):
 #     with lock:
@@ -91,6 +92,13 @@ def generate_quiz_questions(topic):
         print(f"Error genrating Quiz Q's {e}")
         return []
 
+
+
+def generate_quiz_code():
+    """Generate a unique code for the quiz."""
+    return str(uuid.uuid4())[:6]
+
+
 # Generate Suggestions
 def get_suggestions(user_inputs):
     """
@@ -105,10 +113,11 @@ def get_suggestions(user_inputs):
     try:
         if not user_inputs:
             return ["No previous topics found."]
-        
+        print("User_Inputs getSuggestions fucntion ma sa : ",user_inputs)
+        print("Length of userInputs: " , len(user_inputs))
         # previous_topics = [entry['text'] for entry in user_inputs]
-        combined_input = ". ".join(user_inputs)
-        # print("Combined input for suggestions:", combined_input)
+        combined_input = ". ".join(user_inputs[-6:])
+        print("Combined input for suggestions:", combined_input)
             
         chat_session = model.start_chat(history=[])
         response = chat_session.send_message(f"Suggest only simple 6 one linetopics based on: {combined_input}")
@@ -116,7 +125,7 @@ def get_suggestions(user_inputs):
         return response.text.strip().split('\n')[:6]
     except Exception as e:
         print(f"Error generating suggestions {e}")
-        return []
+        return ["Unable to generate suggestions. Please try again later."]
 
 
 

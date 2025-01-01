@@ -12,9 +12,9 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
-from .generate_quiz import generate_quiz_questions, get_suggestions, load_user_inputs, save_user_inputs,extract_line
+from .generate_quiz import generate_quiz_questions, generate_quiz_code,get_suggestions, load_user_inputs, save_user_inputs,extract_line
 from django.conf import settings
-from .models import Quiz, Suggestion ,Question
+from .models import Quiz, Suggestion ,Question ,Participant,ResponseParticipent
 from datetime import datetime, timedelta
 
 class registerView(APIView):
@@ -216,15 +216,16 @@ class QuizAndSuggestionView(APIView):
             return Response({"error": "Prompt is required"}, status=400)
 
         # Load previous user inputs and add new prompt
-        user_inputs = load_user_inputs(user)
-        print("Loaded user inputs:", user_inputs)
+        # user_inputs = load_user_inputs(user)
+        # print("Loaded user inputs:", user_inputs)
        
-        user_inputs.append(prompt)
+        # user_inputs.append(prompt)
         
 
         # Generate Quiz and Suggestions
         quiz_questions = generate_quiz_questions(prompt)
-        suggestions = get_suggestions(user_inputs)
+        quize_code = generate_quiz_code()
+        # suggestions = get_suggestions(user_inputs)
         
         # save_user_inputs(user,suggestions)
          # Save quiz to the database
@@ -232,10 +233,11 @@ class QuizAndSuggestionView(APIView):
         quiz = Quiz.objects.create(
         title=prompt,
         description="Generated quiz",
-        course_name="Default Course",  # Update as needed
-        subject="Default Subject",     # Update as needed
+        course_name="Default Course",  
+        code = quize_code,
+        subject="Default Subject",   
         total_questions=len(quiz_questions),
-        passing_percentage=50,         # Update as needed
+        passing_percentage=50,         
         scheduled_date_time=datetime.now(),
         created_by=user
     )
@@ -252,12 +254,10 @@ class QuizAndSuggestionView(APIView):
       
 
 
-        # mcqs = extract_mcqs(quiz_questions)
-        # suggest_q = extract_suggested_qs(suggestions)
-        # Extract meaningful lines
+        
         print(question_data)
         mcqs = extract_line([f'{q['text']} , {q['options']} , {q['correct_option']}' for q in quiz_questions], ignore_keyword=["##", "Instructions"])
-        suggested_questions = extract_line(suggestions, ignore_keyword=["##", "Here are 6 one-line"])
+        # suggested_questions = extract_line(suggestions, ignore_keyword=["##", "Here are 6 one-line"])
 
         # mcq_question = [f"{q}" for q in mcqs]
         # segetion_question = [f"{q}" for q in suggest_q]
@@ -265,38 +265,46 @@ class QuizAndSuggestionView(APIView):
         # Send response
         return Response({
             "quiz_id": quiz.id,
+            "quiz_code": quize_code,
             "quiz_questions": mcqs,
-            "suggestions": suggested_questions,
+            # "suggestions": suggested_questions,
         })
 
 
 
+class SuggestionView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def post(self, request):
+        """
+        Handle POST requests to generate topic suggestions.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            JSON response containing suggestions.
+        """
+        user = request.user
+        prompt = request.data.get('prompt')
 
 
+        user_inputs = load_user_inputs(user)
+        # user_inputs.append(prompt)
+        if prompt:
+            user_inputs.append(prompt)
+        print(user_inputs)
 
+        suggestions = get_suggestions(user_inputs)
 
-# class ListMCQsView(APIView):
-#     permission_classes = [IsAuthenticated]
-#     authentication_classes = [JWTAuthentication]
+        if   len(user_inputs)==0:  # First-time prompt
+            suggestions = ["No previous topics found."]
+            return Response({"suggestions": suggestions})
 
-#     def get(self, request):
-#         topic = request.query_params.get('topic')
-#         questions = Question.objects.filter(created_by=request.user)
+        save_user_inputs(user, suggestions)
 
-#         if topic:
-#             questions = questions.filter(tag=topic)
-
-#         mcqs = [{
-#             "id": question.id,
-#             "quiz": question.quiz.title,
-#             "text": question.text,
-#             "options": question.options,
-#             "correct_option": question.correct_option,
-#             "tag": question.tag,
-#             "created_by": question.created_by,
-#         } for question in questions]
-
-#         return Response(mcqs)
+        return Response({"suggestions": suggestions})
 
 
 
@@ -338,6 +346,20 @@ class QuestionView(APIView):
 class EditMCQView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
+
+    def get(self, request, pk):
+        try:
+            question = Question.objects.get(pk=pk, created_by=request.user)
+        except Question.DoesNotExist:
+            return Response({"error": "MCQ not found or you do not have permission to access it."}, status=404)
+
+        # Return question details
+        return Response({
+            "id": question.id,
+            "text": question.text,
+            "options": question.options,
+            "correct_option": question.correct_option
+        })
 
     def put(self, request, pk):
         try:
@@ -416,3 +438,77 @@ class ChangePasswordView(APIView):
         update_session_auth_hash(request, user)
 
         return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
+    
+
+from django.shortcuts import get_object_or_404
+
+class JoinQuizView(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+    def post(self,request):
+        code = request.data.get('code')
+        name = request.data.get('name')
+        quiz = get_object_or_404(Quiz,code=code)
+
+        particpent = Participant.objects.create(name=name,quiz_participent=quiz,is_active=True)
+        return Response({'participant_id': particpent.id, 'quiz_id': quiz.id})
+
+class QuestionsParticipentsView(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+    def get(self,request, quiz_id):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        questions = quiz.questions.values('id', 'text', 'options')
+        return Response({'questions': list(questions)})
+    
+
+
+class SubmitResponseView(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+
+    def post(self,request, quiz_id):
+       
+            participant_id = request.data.get('participant_id')
+            responses = request.data.get('responses')  # List of question_id and selected_option
+
+            for response in responses:
+                ResponseParticipent.objects.create(
+                    participant_id=participant_id,
+                    question_response_id=response['question_id'],
+                    select_option=response['select_option']
+                )
+
+
+            participant = Participant.objects.get(id=participant_id)
+            participant.is_active =False
+            participant.save()
+            return Response({'message': 'Responses saved successfully!'})
+    
+
+class QuizResultsView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get(self,request, quiz_id):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        active_participants_count = quiz.participants.filter(is_active=True).count()
+        questions = quiz.questions.all()
+        results = []
+
+        for question in questions:
+            options_count = {option: 0 for option in question.options}
+            for response in question.responses.all():
+                options_count[response.select_option] += 1
+
+            results.append({
+                'question': question.text,
+                'options_count': options_count
+            })
+
+        return Response({
+            'active_participants_count': active_participants_count,
+            'results': results})

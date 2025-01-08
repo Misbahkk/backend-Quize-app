@@ -198,13 +198,13 @@ class QuizAndSuggestionView(APIView):
 
     def post(self, request):
         """
-        Handle POST requests to generate a quiz and topic suggestions.
+        Handle POST requests to generate a quiz 
 
         Args:
             request: The incoming HTTP request.
 
         Returns:
-            JSON response containing quiz questions and suggestions.
+            JSON response containing quiz questions.
         """
         print("Request body:", request.body)  # Raw body
         print("Request data:", request.data)  # Parsed data
@@ -215,21 +215,11 @@ class QuizAndSuggestionView(APIView):
         if not prompt:
             return Response({"error": "Prompt is required"}, status=400)
 
-        # Load previous user inputs and add new prompt
-        # user_inputs = load_user_inputs(user)
-        # print("Loaded user inputs:", user_inputs)
-       
-        # user_inputs.append(prompt)
         
 
-        # Generate Quiz and Suggestions
         quiz_questions = generate_quiz_questions(prompt)
         quize_code = generate_quiz_code()
-        # suggestions = get_suggestions(user_inputs)
         
-        # save_user_inputs(user,suggestions)
-         # Save quiz to the database
-        # Save the quiz to the database
         quiz = Quiz.objects.create(
         title=prompt,
         description="Generated quiz",
@@ -257,17 +247,13 @@ class QuizAndSuggestionView(APIView):
         
         print(question_data)
         mcqs = extract_line([f'{q['text']} , {q['options']} , {q['correct_option']}' for q in quiz_questions], ignore_keyword=["##", "Instructions"])
-        # suggested_questions = extract_line(suggestions, ignore_keyword=["##", "Here are 6 one-line"])
-
-        # mcq_question = [f"{q}" for q in mcqs]
-        # segetion_question = [f"{q}" for q in suggest_q]
-
+        
         # Send response
         return Response({
             "quiz_id": quiz.id,
             "quiz_code": quize_code,
             "quiz_questions": mcqs,
-            # "suggestions": suggested_questions,
+           
         })
 
 
@@ -328,8 +314,30 @@ class ListMCQsView(APIView):
         return Response(serializer.data)
 
 
-# get mcq view only 1 mcq view
+class EditQuizView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
 
+    def put(self, request, pk):
+        try:
+            quiz = Quiz.objects.get(pk=pk, created_by=request.user)
+        except Quiz.DoesNotExist:
+            return Response({"error": "Quiz not found or you do not have permission to edit it."}, status=404)
+
+        data = request.data
+
+        quiz.title = data.get('title', quiz.title)
+        quiz.description = data.get('description', quiz.description)
+        
+        quiz.course_name = data.get('course_name', quiz.course_name)
+        quiz.subject = data.get('subject', quiz.subject)
+
+        quiz.save()
+
+        return Response({"message": "Quiz updated successfully"})
+
+
+# get mcq view only 1 mcq view
 class QuestionView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -342,6 +350,7 @@ class QuestionView(APIView):
 
         serializer = QuizSerializer(question)
         return Response(serializer.data)
+
 
 class EditMCQView(APIView):
     permission_classes = [IsAuthenticated]
@@ -379,6 +388,7 @@ class EditMCQView(APIView):
         return Response({"message": "MCQ updated successfully"})
     
 
+# TODO: Ya pura ek quize delete kr da ga
 class DeleteQuizView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -393,7 +403,7 @@ class DeleteQuizView(APIView):
         return Response({"message": "MCQ deleted successfully"})
 
 
-
+# TODO: ya pura ek question delete kare ga
 class DeleteMCQView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -443,50 +453,68 @@ class ChangePasswordView(APIView):
 from django.shortcuts import get_object_or_404
 
 class JoinQuizView(APIView):
-    permission_classes = [IsAuthenticated]  
-    authentication_classes = [JWTAuthentication]  
+     
 
     def post(self,request):
         code = request.data.get('code')
         name = request.data.get('name')
+        email = request.data.get('email')
         quiz = get_object_or_404(Quiz,code=code)
 
-        particpent = Participant.objects.create(name=name,quiz_participent=quiz,is_active=True)
+        existing_participant = Participant.objects.filter(email=email, quiz_participent=quiz, is_active=True).first()
+        if existing_participant:
+            return Response({'error': 'Participant already joined this quiz'}, status=400)
+
+        particpent = Participant.objects.create(name=name,email=email,quiz_participent=quiz,is_active=True)
         return Response({'participant_id': particpent.id, 'quiz_id': quiz.id})
 
 class QuestionsParticipentsView(APIView):
-    permission_classes = [IsAuthenticated]  
-    authentication_classes = [JWTAuthentication]  
+    
 
     def get(self,request, quiz_id):
-        quiz = get_object_or_404(Quiz, id=quiz_id)
+        participant_id = request.query_params.get('participant_id')
+        if not participant_id:
+            return Response({'error': 'Participant ID is required'}, status=400)
+        
+        try:
+            participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
+        except Participant.DoesNotExist:
+            return Response({'error': 'Participant not authorized for this quiz'}, status=403)
+        
+        # Only fetch questions if the participant is valid
+        quiz = participant.quiz_participent
         questions = quiz.questions.values('id', 'text', 'options')
         return Response({'questions': list(questions)})
     
 
 
 class SubmitResponseView(APIView):
-    permission_classes = [IsAuthenticated]  
-    authentication_classes = [JWTAuthentication]  
-
-
     def post(self,request, quiz_id):
        
             participant_id = request.data.get('participant_id')
             responses = request.data.get('responses')  # List of question_id and selected_option
+            try:
+                participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
+            except Participant.DoesNotExist:
+                return Response({'error': 'Participant not authorized for this quiz'}, status=403)
+
 
             for response in responses:
                 ResponseParticipent.objects.create(
                     participant_id=participant_id,
                     question_response_id=response['question_id'],
                     select_option=response['select_option']
-                )
-
-
-            participant = Participant.objects.get(id=participant_id)
+                )          
+            total_marks , status ,passing_marks= calculate_marks(participant,quiz_id)
+            if total_marks>=passing_marks:
+                participant.passed_quiz_count+=1
+               
+            else:
+                participant.failed_quiz_count+=1
+            participant.total_attempts =+1
             participant.is_active =False
             participant.save()
-            return Response({'message': 'Responses saved successfully!'})
+            return Response({'message':'Responses saved successfully!'})
     
 
 class QuizResultsView(APIView):
@@ -512,3 +540,117 @@ class QuizResultsView(APIView):
         return Response({
             'active_participants_count': active_participants_count,
             'results': results})
+
+
+class quiz_result(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+    def get(self,request, quiz_id):
+        # Specific quiz filter
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+
+        total_question = quiz.total_questions
+        max_markx = total_question*10
+        # Quiz ke participants fetch karna
+        participants = Participant.objects.filter(quiz_participent=quiz)
+
+        results = []
+
+        # Har participant ka data fetch karna
+        for participant in participants:
+            # ResponseParticipent se total marks calculate karna
+            total_marks,status ,passing_markx= calculate_marks(participant,quiz_id)
+           
+
+
+            results.append({
+                "name": participant.name,
+                "marks": f"{total_marks}/{max_markx}",  # Assuming total marks are out of 100
+                "status": status
+            })
+
+        # Response bhejna
+        return Response({
+            "quiz_name": quiz.title,
+            "results": results
+        })
+
+
+def calculate_marks(participant,quiz_id):
+    responses = ResponseParticipent.objects.filter(participant=participant)
+    quiz = get_object_or_404(Quiz, id=quiz_id)
+    correct_responses = 0
+    total_question = quiz.total_questions
+    max_markx = total_question*10
+    passing_marks = max_markx/2
+
+
+    for response in responses:
+        # Assume every correct answer gives 10 marks
+        if response.select_option == response.question_response.correct_option:
+            correct_responses += 1
+    total_marks =correct_responses * 10
+    status = "Pass" if total_marks >= passing_marks else "Fail"
+
+    # Example: If each question carries 10 marks
+    return total_marks,status ,passing_marks
+
+
+    
+
+from django.db.models import Count,Q
+class UserQuestionReport(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+    def get(selg,request):
+        user = request.user
+        # Get all questions created by the specific user
+        user_questions = Question.objects.filter(created_by_id=user)
+        
+        # Total questions created by the user
+        total_questions = user_questions.count()
+        
+        # Group questions by text to find duplicates
+        question_counts = user_questions.values('text').annotate(count=Count('id'))
+        
+        # Calculate unique and repeated questions
+        unique_questions = sum(1 for q in question_counts if q['count'] == 1)
+        repeated_questions = total_questions - unique_questions
+        
+        # Prepare data for response
+        data = {
+            'total_questions': total_questions,
+            'unique_questions': unique_questions,
+            'repeated_questions': repeated_questions,
+        }
+        return Response(data)
+
+
+
+
+
+from rest_framework import status
+from django.db.models import Count, Q
+
+
+class UserQuizAnalysis(APIView):
+    permission_classes = [IsAuthenticated]  
+    authentication_classes = [JWTAuthentication]  
+
+    def get(self, request):
+        # Get quizzes created by the user
+        user = request.user
+        quizzes = Quiz.objects.filter(created_by_id=user)
+
+        # Get participants for these quizzes
+        participants = Participant.objects.filter(quiz_participent__in=quizzes)
+
+        # Annotate participants with their pass/fail counts dynamically
+        analysis = participants.annotate(
+            pass_count=Count('quiz_participent', filter=Q(passed_quiz_count__gte=1)),
+            fail_count=Count('quiz_participent', filter=Q(failed_quiz_count__gte=1))
+        ).values('name', 'email', 'total_attempts', 'pass_count', 'fail_count')
+
+        return Response(analysis)

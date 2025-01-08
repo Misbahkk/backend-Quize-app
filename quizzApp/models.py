@@ -86,7 +86,11 @@ class Suggestion(models.Model):
 class Participant(models.Model):
     name = models.CharField(max_length=100)
     is_active = models.BooleanField(default=False)
+    email = models.EmailField(max_length=254,blank=True,null=True) 
     quiz_participent = models.ForeignKey(Quiz,on_delete=models.CASCADE,related_name="participants")
+    total_attempts = models.IntegerField(default=0)
+    passed_quiz_count = models.IntegerField(default=0)
+    failed_quiz_count = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -97,6 +101,12 @@ class ResponseParticipent(models.Model):
     participant = models.ForeignKey('Participant', on_delete=models.CASCADE)
     question_response = models.ForeignKey('Question',on_delete=models.CASCADE, related_name="responses")
     select_option = models.CharField(max_length=200)
+    is_correct = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.participant.name} - {self.question_response.text}"
+    
+
+
+
+

@@ -127,6 +127,22 @@ class LogoutView(APIView):
         return responce
     
 
+class UpdateUserView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    def get(self, request, *args, **kwargs):
+        user = request.user  # Authenticated user
+        serializer = UserSerializer(user)  # Serialize user data
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+    def put(self, request, *args, **kwargs):
+        user = request.user  # Authenticated user
+        serializer = UserSerializer(user, data=request.data, partial=True)  # `partial=True` allows partial updates
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -480,6 +496,10 @@ class QuestionsParticipentsView(APIView):
             participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
         except Participant.DoesNotExist:
             return Response({'error': 'Participant not authorized for this quiz'}, status=403)
+
+        
+        if not participant.is_active:
+            return Response({"message":"you have alredy join the quiz thank you "})
         
         # Only fetch questions if the participant is valid
         quiz = participant.quiz_participent
@@ -487,37 +507,87 @@ class QuestionsParticipentsView(APIView):
         return Response({'questions': list(questions)})
     
 
-
-class SubmitResponseView(APIView):
-    def post(self,request, quiz_id):
+# class SubmitResponseView(APIView):
+#     def post(self,request, quiz_id):
        
-            participant_id = request.data.get('participant_id')
-            responses = request.data.get('responses')  # List of question_id and selected_option
-            try:
-                participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
-            except Participant.DoesNotExist:
-                return Response({'error': 'Participant not authorized for this quiz'}, status=403)
+#             participant_id = request.data.get('participant_id')
+#             responses = request.data.get('responses')  # List of question_id and selected_option
+#             try:
+#                 participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
+#             except Participant.DoesNotExist:
+#                 return Response({'error': 'Participant not authorized for this quiz'}, status=403)
 
 
-            for response in responses:
-                ResponseParticipent.objects.create(
-                    participant_id=participant_id,
-                    question_response_id=response['question_id'],
-                    select_option=response['select_option']
-                )          
-            total_marks , status ,passing_marks= calculate_marks(participant,quiz_id)
-            if total_marks>=passing_marks:
-                participant.passed_quiz_count+=1
+#             for response in responses:
+#                 ResponseParticipent.objects.create(
+#                     participant_id=participant_id,
+#                     question_response_id=response['question_id'],
+#                     select_option=response['select_option']
+#                 )          
+#             total_marks , status ,passing_marks= calculate_marks(participant,quiz_id)
+#             if total_marks>=passing_marks:
+#                 participant.passed_quiz_count+=1
                
-            else:
-                participant.failed_quiz_count+=1
-            participant.total_attempts =+1
-            participant.is_active =False
-            participant.save()
-            return Response({'message':'Responses saved successfully!'})
+#             else:
+#                 participant.failed_quiz_count+=1
+#             participant.total_attempts =+1
+#             participant.is_active =False
+#             participant.save()
+#             return Response({'message':'Responses saved successfully!'})
     
 
-class QuizResultsView(APIView):
+class SubmitResponseView(APIView):
+    def post(self, request, quiz_id):
+        participant_id = request.data.get('participant_id')
+        question_id = request.data.get('question_id')
+        selected_option = request.data.get('selected_option')
+
+        # Validate participant existence
+        try:
+            participant = Participant.objects.get(id=participant_id, quiz_participent_id=quiz_id)
+        except Participant.DoesNotExist:
+            return Response({'error': 'Participant not authorized for this quiz'}, status=403)
+
+        
+        
+        # Create the response for the selected question and option
+        try:
+            ResponseParticipent.objects.create(
+                participant_id=participant_id,
+                question_response_id=question_id,
+                select_option=selected_option
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+        # Calculate the participant's marks and status
+        total_marks, status, passing_marks = calculate_marks(participant, quiz_id)
+
+         # Check if the quiz is finished
+        completed_responses = ResponseParticipent.objects.filter(participant_id=participant_id, quiz_participent_id=quiz_id)
+        total_questions = Quiz.objects.get(id=quiz_id).questions.count()  # Assuming you have a relation between quiz and questions
+
+        # Update participant status after quiz completion
+        if completed_responses.count() == total_questions:
+            participant.is_active = False
+            participant.total_attempts += 1
+
+
+        # Update participant stats based on their performance
+        if total_marks >= passing_marks:
+            participant.passed_quiz_count += 1
+        else:
+            participant.failed_quiz_count += 1
+
+        
+          # Disable participant after quiz submission
+        participant.save()
+
+        return Response({'message': 'Response saved successfully!'}, status=200)
+
+
+
+class QuizLivePollingView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
 
@@ -533,13 +603,52 @@ class QuizResultsView(APIView):
                 options_count[response.select_option] += 1
 
             results.append({
-                'question': question.text,
+                # 'question': question.text,
                 'options_count': options_count
             })
 
         return Response({
             'active_participants_count': active_participants_count,
             'results': results})
+
+
+# from asgiref.sync import async_to_sync
+# from channels.layers import get_channel_layer
+
+# class QuizLivePollingView(APIView):
+#     # Existing code...
+#     permission_classes = [IsAuthenticated]
+#     authentication_classes = [JWTAuthentication]
+
+#     def post(self, request, quiz_id):
+#         user = request.user
+#         quiz = get_object_or_404(Quiz, id=quiz_id)
+#         question = quiz.questions.get(id=request.data['question_id'])
+#         selected_option = request.data['selected_option']
+
+#         # Update response count
+#         question.responses.create(user=user, select_option=selected_option)
+
+#         # Send live update
+#         options_count = {option: 0 for option in question.options}
+#         for response in question.responses.all():
+#             options_count[response.select_option] += 1
+
+#         channel_layer = get_channel_layer()
+#         async_to_sync(channel_layer.group_send)(
+#             f'quiz_{quiz_id}',
+#             {
+#                 'type': 'poll_update',
+#                 'message': {
+#                     'active_participants_count': quiz.participants.filter(is_active=True).count(),
+#                     'results': [{
+#                         'options_count': options_count
+#                     }]
+#                 }
+#             }
+#         )
+
+#         return Response({'message': 'Vote recorded successfully.'})
 
 
 class quiz_result(APIView):
@@ -654,3 +763,7 @@ class UserQuizAnalysis(APIView):
         ).values('name', 'email', 'total_attempts', 'pass_count', 'fail_count')
 
         return Response(analysis)
+
+
+
+        

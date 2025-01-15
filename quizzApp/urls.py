@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import registerView ,LoginView ,UserView ,LogoutView,PasswordResetRequestView,PasswordResetConfirmView,ChangePasswordView,QuizAndSuggestionView,SuggestionView,ListMCQsView,EditQuizView,EditMCQView,DeleteMCQView, DeleteQuizView,QuestionView,JoinQuizView,QuestionsParticipentsView,SubmitResponseView,QuizResultsView,quiz_result,UserQuestionReport,UserQuizAnalysis
+from .views import registerView ,LoginView ,UserView ,LogoutView,UpdateUserView,PasswordResetRequestView,PasswordResetConfirmView,ChangePasswordView,QuizAndSuggestionView,SuggestionView,ListMCQsView,EditQuizView,EditMCQView,DeleteMCQView, DeleteQuizView,QuestionView,JoinQuizView,QuestionsParticipentsView,SubmitResponseView,QuizLivePollingView,quiz_result,UserQuestionReport,UserQuizAnalysis
 from rest_framework_simplejwt.views import TokenRefreshView
 
 
@@ -9,6 +9,7 @@ urlpatterns = [
     path('login', LoginView.as_view()),
     path('user', UserView.as_view()),
     path('logout', LogoutView.as_view()),
+    path('update-user/', UpdateUserView.as_view(), name='update-user'),
     path('request-reset-password', PasswordResetRequestView.as_view()),
     path('reset-password/', PasswordResetConfirmView.as_view()),
     path('change-password', ChangePasswordView.as_view()),
@@ -24,7 +25,7 @@ urlpatterns = [
     path("join-quiz/", JoinQuizView.as_view(), name="join_quiz"),
     path("<int:quiz_id>/question-particepent/", QuestionsParticipentsView.as_view(), name="question_participent"),
     path("<int:quiz_id>/submit-responce/", SubmitResponseView.as_view(), name="submit_repsponce"),
-    path("<int:quiz_id>/live_polling/", QuizResultsView.as_view(), name="live_polling"),
+    path("<int:quiz_id>/live_polling/", QuizLivePollingView.as_view(), name="live_polling"),
     path('<int:quiz_id>/result/', quiz_result.as_view(), name='quiz_result'),
     path('question-report/', UserQuestionReport.as_view(), name='question_report'),
     path('quizzes/analysis/', UserQuizAnalysis.as_view(), name='quiz_analysis'),

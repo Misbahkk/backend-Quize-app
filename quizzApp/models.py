@@ -13,19 +13,33 @@ class User(AbstractUser):
     password = models.CharField(max_length=255)
     username =  None
 
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
     ROLE_CHOICES = [
         ('student', 'Student'),
         ('teacher', 'Teacher'),
     ]
-    
+    GENDER_cHOICES=[
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+    ]
+    COUNTRY_CHOICES = [
+        ('pakistan', 'Pakistan'),
+        ('india', 'India'),
+        ('bangladesh', 'Bangladesh'),
+    ]
+    LANGUAGE_CHOICES = [
+        ('english', 'English'),
+        ('urdu', 'Urdu'),
+        ('sindhi', 'Sindhi'),
+    ]
+    language = models.CharField(max_length=20,choices=LANGUAGE_CHOICES,default='english')
     role = models.CharField(max_length=7, choices=ROLE_CHOICES, default='student')
+    gender = models.CharField(max_length=7,choices=GENDER_cHOICES,default='other')
+    country = models.CharField(max_length=20,choices=COUNTRY_CHOICES,default='pakistan')
     
-    #   # Password reset fields
-    # reset_token = models.CharField(max_length=30, null=True, blank=True)
-    # reset_token_expiry = models.DateTimeField(null=True, blank=True)
-
 
 
     # OTP fields for password reset

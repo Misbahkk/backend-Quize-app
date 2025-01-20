@@ -1,5 +1,5 @@
 from django.urls import path 
-from .views import registerView ,LoginView ,UserView ,LogoutView,UpdateUserView,PasswordResetRequestView,PasswordResetConfirmView,ChangePasswordView,QuizAndSuggestionView,SuggestionView,ListMCQsView,EditQuizView,EditMCQView,DeleteMCQView, DeleteQuizView,QuestionView,JoinQuizView,QuestionsParticipentsView,SubmitResponseView,QuizLivePollingView,quiz_result,UserQuestionReport,UserQuizAnalysis
+from .views import registerView ,LoginView ,UserView ,LogoutView,ParticipantResultAPIView,UpdateUserView,PasswordResetRequestView,PasswordResetConfirmView,ChangePasswordView,QuizAndSuggestionView,SuggestionView,ListMCQsView,EditQuizView,EditMCQView,DeleteMCQView, DeleteQuizView,QuestionView,JoinQuizView,QuestionsParticipentsView,SubmitResponseView,QuizLivePollingView,quiz_result,UserQuestionReport,UserQuizAnalysis
 from rest_framework_simplejwt.views import TokenRefreshView
 
 
@@ -29,4 +29,5 @@ urlpatterns = [
     path('<int:quiz_id>/result/', quiz_result.as_view(), name='quiz_result'),
     path('question-report/', UserQuestionReport.as_view(), name='question_report'),
     path('quizzes/analysis/', UserQuizAnalysis.as_view(), name='quiz_analysis'),
+    path('participant/<int:participant_id>/result/', ParticipantResultAPIView.as_view(), name='quiz_analysis'),
 ]

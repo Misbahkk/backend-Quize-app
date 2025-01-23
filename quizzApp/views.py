@@ -819,20 +819,31 @@ class ParticipantResultAPIView(APIView):
         try:
             participant = Participant.objects.get(id=participant_id)
             responses = ResponseParticipent.objects.filter(participant=participant)
-
+            correct_responses = 0
+            # total_question = quiz.total_questions
             total_questions = responses.count()
-            correct_answers = responses.filter(is_correct=True).count()
-            wrong_answers = total_questions - correct_answers
-            pass_criteria = 5  # Pass criteria (change as required)
-            passed = correct_answers >= pass_criteria
+            max_markx = total_questions*10
+            passing_marks = max_markx/2
+
+            # correct_answers = responses.filter(is_correct=True).count()
+            # pass_criteria = 5  # Pass criteria (change as required)
+            # passed = correct_answers >= pass_criteria
+
+            for response in responses:
+                # Assume every correct answer gives 10 marks
+                if response.select_option == response.question_response.correct_option:
+                    correct_responses += 1
+            total_marks =correct_responses * 10
+            status = "Pass" if total_marks >= passing_marks else "Fail"
+            wrong_answers = total_questions - correct_responses
 
             result = {
                 "name": participant.name,
                 "total_questions": total_questions,
-                "correct_answers": correct_answers,
+                "correct_answers": correct_responses,
                 "wrong_answers": wrong_answers,
-                "passed": passed,
-                "pass_criteria": pass_criteria,
+                "passed": status,
+                "pass_criteria": passing_marks,
             }
             return Response(result)
         except Participant.DoesNotExist:
